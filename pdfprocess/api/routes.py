@@ -158,26 +158,6 @@ async def upload_document(
             os.remove(temp_file_path)
             
         return {"message": "File processed successfully", "id": doc_id}
-                chunk_overlap=200,
-                length_function=len,
-            )
-            chunks = text_splitter.split_text(full_text)
-
-            # 4. Insert Chunks
-            chunk_data_list = []
-            for i, chunk_text in enumerate(chunks):
-                chunk_data_list.append({
-                    "document_id": document_id,
-                    "project_id": project_id,
-                    "chunk_index": i,
-                    "chunk_text": chunk_text
-                })
-            
-            # Batch insert chunks (Supabase limits might apply, but 100s is usually fine)
-            batch_size = 100
-            for i in range(0, len(chunk_data_list), batch_size):
-                 batch = chunk_data_list[i:i + batch_size]
-                 supabase_client.table("document_chunks").insert(batch).execute()
 
             # 5. Update Status -> completed
             supabase_client.table("documents").update({
