@@ -17,6 +17,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Import Routes
+from api.routes import router as api_router
+
+# Include API Router
+app.include_router(api_router, prefix="/api/v1")
+
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
