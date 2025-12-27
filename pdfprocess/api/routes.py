@@ -159,26 +159,6 @@ async def upload_document(
             
         return {"message": "File processed successfully", "id": doc_id}
 
-            # 5. Update Status -> completed
-            supabase_client.table("documents").update({
-                "upload_status": "completed"
-            }).eq("id", document_id).execute()
-
-            return {
-                "message": "File processed successfully", 
-                "document_id": document_id,
-                "chunks_count": len(chunks)
-            }
-
-        except Exception as e:
-            print(f"Processing Error: {e}")
-            # Update Status -> failed
-            supabase_client.table("documents").update({
-                "upload_status": "failed",
-                "error_message": str(e)
-            }).eq("id", document_id).execute()
-            raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-
     except Exception as e:
         print(f"Upload Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
