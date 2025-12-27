@@ -72,6 +72,8 @@ const ProjectView = () => {
 
     // Add loading state for ProjectView
     const [projectViewLoading, setProjectViewLoading] = useState(true);
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState("");
 
     useEffect(() => {
         let intervalId;
@@ -127,8 +129,23 @@ const ProjectView = () => {
 
     const fetchDocuments = async () => {
         try {
+            console.log("Fetching documents for project:", projectId);
             const data = await getDocuments(projectId);
-            setDocuments(data.documents || []);
+            console.log("Fetched documents response:", data);
+            setDocuments(data.documents || []); // Ensure this matches backend response structure!
+            // Note: Backend get_documents returns list directly, OR dict? 
+            // My python code: return res.data (List[Dict]).
+            // So data IS the array. 
+            // Wait, earlier code was: setDocuments(data.documents || []) implies it expected { documents: [...] }?
+            // If backend returns Array, then data.documents is undefined!
+            // FIX: Handle both cases
+            if (Array.isArray(data)) {
+                setDocuments(data);
+            } else if (data && data.documents) {
+                setDocuments(data.documents);
+            } else {
+                setDocuments([]);
+            }
             return data;
         } catch (error) {
             console.error("Failed to fetch documents", error);
@@ -236,7 +253,10 @@ const ProjectView = () => {
         if (!inputMessage.trim() || loading) return;
 
         if (selectedDocuments.length === 0) {
-            alert("Please select at least one document from the sidebar to start chatting.");
+            // alert("Please select at least one document from the sidebar to start chatting.");
+            setToastMessage("Please select at least one document from the sidebar to start chatting.");
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 3000);
             return;
         }
 
@@ -380,6 +400,13 @@ const ProjectView = () => {
 
     return (
         <div className="h-[100dvh] flex bg-[#FDF6F0] overflow-hidden font-sans text-[#4A3B32]">
+            {/* Toast Notification */}
+            {showToast && (
+                <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-[#4A3B32] text-white px-6 py-3 rounded-full shadow-xl z-[100] flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <HelpCircle className="h-5 w-5 text-[#C8A288]" />
+                    <span className="font-medium text-sm">{toastMessage}</span>
+                </div>
+            )}
 
             {/* Mobile Sidebar Overlay */}
             {isMobileMenuOpen && (
