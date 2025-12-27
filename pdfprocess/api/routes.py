@@ -6,7 +6,10 @@ from config.settings import settings
 import json
 import asyncio
 from fastapi.responses import StreamingResponse
+
 import uuid
+import fitz # PyMuPDF
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Define Router
 router = APIRouter()
@@ -113,23 +116,87 @@ async def upload_document(
     project_id: str = Form(...)
 ):
     """
-    Receives file, parses text (stub), and saves to 'documents' table.
+    Receives file, extracts text, chunks it, and saves to 'documents' and 'document_chunks'.
     """
     try:
         content = await file.read()
-        text_content = content.decode("utf-8", errors="ignore") # Simple decoding
+        file_size = len(content)
+        filename = file.filename
+        file_type = file.content_type
         
-        # Insert into 'documents'
-        data = {
+        # 1. Create Document Record (Status: processing)
+        doc_data = {
             "project_id": project_id,
-            "filename": file.filename,
-            "content": text_content[:100000] # Limit size for safety
-            # "embedding": ... # Removed for now as we lack keys
+            "filename": filename,
+            "file_type": file_type,
+            "file_size": file_size,
+            "upload_status": "processing"
         }
+        res = supabase_client.table("documents").insert(doc_data).execute()
+        if not res.data:
+             raise HTTPException(status_code=500, detail="Failed to create document record")
         
-        res = supabase_client.table("documents").insert(data).execute()
-        return {"message": "File uploaded", "details": res.data}
-        
+        document_record = res.data[0]
+        document_id = document_record["id"]
+
+        try:
+            # 2. Extract Text
+            full_text = ""
+            if file_type == "application/pdf" or filename.lower().endswith(".pdf"):
+                with fitz.open(stream=content, filetype="pdf") as doc:
+                    for page in doc:
+                        full_text += page.get_text()
+            else:
+                # Fallback for text/md
+                full_text = content.decode("utf-8", errors="ignore")
+            
+            if not full_text.strip():
+                 raise Exception("No text extracted from file")
+
+            # 3. Chunk Text
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                length_function=len,
+            )
+            chunks = text_splitter.split_text(full_text)
+
+            # 4. Insert Chunks
+            chunk_data_list = []
+            for i, chunk_text in enumerate(chunks):
+                chunk_data_list.append({
+                    "document_id": document_id,
+                    "project_id": project_id,
+                    "chunk_index": i,
+                    "chunk_text": chunk_text
+                })
+            
+            # Batch insert chunks (Supabase limits might apply, but 100s is usually fine)
+            batch_size = 100
+            for i in range(0, len(chunk_data_list), batch_size):
+                 batch = chunk_data_list[i:i + batch_size]
+                 supabase_client.table("document_chunks").insert(batch).execute()
+
+            # 5. Update Status -> completed
+            supabase_client.table("documents").update({
+                "upload_status": "completed"
+            }).eq("id", document_id).execute()
+
+            return {
+                "message": "File processed successfully", 
+                "document_id": document_id,
+                "chunks_count": len(chunks)
+            }
+
+        except Exception as e:
+            print(f"Processing Error: {e}")
+            # Update Status -> failed
+            supabase_client.table("documents").update({
+                "upload_status": "failed",
+                "error_message": str(e)
+            }).eq("id", document_id).execute()
+            raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
     except Exception as e:
         print(f"Upload Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
