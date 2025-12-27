@@ -142,22 +142,22 @@ async def upload_document(
         
         if not res.data:
              raise HTTPException(status_code=500, detail="Failed to create document record")
-            # 2. Extract Text
-            full_text = ""
-            if file_type == "application/pdf" or filename.lower().endswith(".pdf"):
-                with fitz.open(stream=content, filetype="pdf") as doc:
-                    for page in doc:
-                        full_text += page.get_text()
-            else:
-                # Fallback for text/md
-                full_text = content.decode("utf-8", errors="ignore")
+             
+        doc_id = res.data[0]['id']
+        
+        # 3. Process Document
+        await document_processor.process_document(
+            document_id=str(doc_id),
+            project_id=project_id,
+            file_path=temp_file_path,
+            filename=file.filename
+        )
+        
+        # 4. Cleanup
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
             
-            if not full_text.strip():
-                 raise Exception("No text extracted from file")
-
-            # 3. Chunk Text
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
+        return {"message": "File processed successfully", "id": doc_id}
                 chunk_overlap=200,
                 length_function=len,
             )
