@@ -116,30 +116,32 @@ async def upload_document(
     project_id: str = Form(...)
 ):
     """
-    Receives file, extracts text, chunks it, and saves to 'documents' and 'document_chunks'.
+    Receives file, saves to temp, and processes using DocumentProcessor.
     """
+    import os
+    import shutil
+    from services.document_processor import document_processor
+    
+    # Create temp directory if not exists
+    os.makedirs("temp", exist_ok=True)
+    temp_file_path = f"temp/{file.filename}"
+    
     try:
-        content = await file.read()
-        file_size = len(content)
-        filename = file.filename
-        file_type = file.content_type
-        
-        # 1. Create Document Record (Status: processing)
-        doc_data = {
+        # 1. Save UploadFile to disk
+        with open(temp_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # 2. Insert Initial Record into Supabase
+        data = {
             "project_id": project_id,
-            "filename": filename,
-            "file_type": file_type,
-            "file_size": file_size,
-            "upload_status": "processing"
+            "filename": file.filename,
+            "upload_status": "uploading",
+            # "content": "" # Content will be processed
         }
-        res = supabase_client.table("documents").insert(doc_data).execute()
+        res = supabase_client.table("documents").insert(data).execute()
+        
         if not res.data:
              raise HTTPException(status_code=500, detail="Failed to create document record")
-        
-        document_record = res.data[0]
-        document_id = document_record["id"]
-
-        try:
             # 2. Extract Text
             full_text = ""
             if file_type == "application/pdf" or filename.lower().endswith(".pdf"):
