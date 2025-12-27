@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from db.client import supabase_client
@@ -6,6 +6,7 @@ from config.settings import settings
 import json
 import asyncio
 from fastapi.responses import StreamingResponse
+import uuid
 
 # Define Router
 router = APIRouter()
@@ -27,6 +28,15 @@ class SignupRequest(BaseModel):
     password: str
     full_name: str
 
+# --- Project/Doc Schemas ---
+class CreateProjectRequest(BaseModel):
+    name: str
+
+class ProjectResponse(BaseModel):
+    id: str
+    name: str
+    created_at: str
+
 # --- Chat/RAG Schemas ---
 class ChatRequest(BaseModel):
     project_id: str
@@ -45,6 +55,102 @@ class NotesRequest(BaseModel):
     note_type: str
     topic: str
     selected_documents: List[str] = []
+
+# --- PROJECT ENDPOINTS ---
+
+@router.post("/projects/", response_model=ProjectResponse)
+async def create_project(request: CreateProjectRequest):
+    """
+    Creates a new project in Supabase 'projects' table.
+    """
+    try:
+        # 1. Insert into Supabase
+        # NOTE: This requires a 'projects' table in Supabase.
+        # Structure: id (uuid), name (text), created_at (timestamptz)
+        data = {
+            "name": request.name,
+            # "user_id": ... # In a real app, we get this from Auth Middleware
+        }
+        res = supabase_client.table("projects").insert(data).execute()
+        
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to create project in DB")
+            
+        project = res.data[0]
+        return {
+            "id": project.get("id"),
+            "name": project.get("name"),
+            "created_at": project.get("created_at")
+        }
+    except Exception as e:
+        print(f"Project Create Error: {e}")
+        # Fallback for when Table doesn't exist yet (Mocking success to not crash UI)
+        # return {"id": str(uuid.uuid4()), "name": request.name, "created_at": "2024-01-01T00:00:00Z"}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/projects/")
+async def get_projects():
+    try:
+        res = supabase_client.table("projects").select("*").execute()
+        return res.data
+    except Exception as e:
+        print(f"Get Projects Error: {e}")
+        return []
+
+@router.delete("/projects/{project_id}")
+async def delete_project(project_id: str):
+    try:
+        supabase_client.table("projects").delete().eq("id", project_id).execute()
+        return {"message": "Project deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- DOCUMENT ENDPOINTS ---
+
+@router.post("/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...), 
+    project_id: str = Form(...)
+):
+    """
+    Receives file, parses text (stub), and saves to 'documents' table.
+    """
+    try:
+        content = await file.read()
+        text_content = content.decode("utf-8", errors="ignore") # Simple decoding
+        
+        # Insert into 'documents'
+        data = {
+            "project_id": project_id,
+            "filename": file.filename,
+            "content": text_content[:100000] # Limit size for safety
+            # "embedding": ... # Removed for now as we lack keys
+        }
+        
+        res = supabase_client.table("documents").insert(data).execute()
+        return {"message": "File uploaded", "details": res.data}
+        
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/{project_id}")
+async def get_documents(project_id: str):
+    try:
+        res = supabase_client.table("documents").select("*").eq("project_id", project_id).execute()
+        return res.data
+    except Exception as e:
+         return []
+
+@router.delete("/documents/{document_id}")
+async def delete_document(document_id: str):
+    try:
+        supabase_client.table("documents").delete().eq("id", document_id).execute()
+        return {"message": "Deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- AUTH ENDPOINTS ---
 
 # --- AUTH ENDPOINTS ---
 
