@@ -21,8 +21,17 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx", "txt", "html", "md"]
     
     # Chunking Configuration
-    CHUNK_SIZE: int = 500
-    CHUNK_OVERLAP: int = 50
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+
+    # RAG / LLM Configuration
+    TOGETHER_API_KEY: str
+    TOGETHER_BASE_URL: str = "https://api.together.xyz/v1"
+    
+    # Models
+    # Using small/efficient models for speed and cost
+    EMBEDDING_MODEL: str = "togethercomputer/m2-bert-80M-8k-retrieval" # 768 dims
+    CHAT_MODEL: str = "meta-llama/Llama-3-8b-chat-hf" # Fast, good chat model
     
     class Config:
         env_file = ".env"

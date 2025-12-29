@@ -275,28 +275,17 @@ async def chat_stream(request: ChatRequest):
     3. Stream LLM Response.
     """
     
-    # 1. Dummy Retrieval (Replace with actual Vector Store logic later)
-    # We query Supabase 'document_chunks' via RPC or Select
-    # For now, we simulate retrieval to unblock the UI loop.
+    from services.chat_service import chat_service
     
-    # Mocking a stream generator
-    async def event_generator():
-        # Fake retrieval context
-        sources = [
-            {"id": "doc1", "filename": "example.pdf", "content": "Sample context content..."}
-        ]
-        
-        # Send Sources First (Protocol expected by Frontend)
-        yield f"__SOURCES__:{json.dumps(sources)}"
-        
-        # Stream Answer chunks
-        response_text = f" This is a simulated response regarding your project {request.project_id}. logic is being rebuilt."
-        
-        for word in response_text.split(" "):
-            yield word + " "
-            await asyncio.sleep(0.05)
-            
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        chat_service.chat_stream(
+            project_id=request.project_id,
+            message=request.message,
+            history=request.session_history,
+            selected_documents=request.selected_documents
+        ),
+        media_type="text/event-stream"
+    )
 
 
 @router.get("/chat/history/{project_id}")

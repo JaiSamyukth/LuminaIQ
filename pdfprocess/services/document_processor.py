@@ -7,6 +7,8 @@ from utils.file_parser import FileParser
 from utils.text_chunker import TextChunker
 from utils.logger import logger
 
+from langchain_openai import OpenAIEmbeddings
+
 class DocumentProcessor:
     def __init__(self):
         self.client = supabase_client
@@ -14,6 +16,12 @@ class DocumentProcessor:
         self.text_chunker = TextChunker(
             chunk_size=settings.CHUNK_SIZE,
             overlap=settings.CHUNK_OVERLAP
+        )
+        # Initialize Embeddings (Together AI)
+        self.embeddings = OpenAIEmbeddings(
+            model=settings.EMBEDDING_MODEL,
+            openai_api_key=settings.TOGETHER_API_KEY,
+            openai_api_base=settings.TOGETHER_BASE_URL
         )
     
     async def process_document(
@@ -73,20 +81,30 @@ class DocumentProcessor:
         project_id: str,
         chunks: list
     ):
-        """Store text chunks in document_chunks table"""
+        """Store text chunks + embeddings in document_chunks table"""
         try:
+            # Generate Embeddings for the whole batch
+            logger.info(f"Generating embeddings for {len(chunks)} chunks...")
+            # Run in thread pool to avoid blocking async loop since it's a sync call or IO heavy
+            loop = asyncio.get_running_loop()
+            embeddings_list = await loop.run_in_executor(
+                None, 
+                lambda: self.embeddings.embed_documents(chunks)
+            )
+            
             # Prepare chunk records
             chunk_records = [
                 {
                     "document_id": document_id,
                     "project_id": project_id,
                     "chunk_index": idx,
-                    "chunk_text": chunk_text
+                    "chunk_text": chunk_text,
+                    "embedding": embeddings_list[idx]
                 }
                 for idx, chunk_text in enumerate(chunks)
             ]
             
-            # Insert in batches of 100 to avoid payload size limits
+            # Insert in batches of 100
             batch_size = 100
             for i in range(0, len(chunk_records), batch_size):
                 batch = chunk_records[i:i + batch_size]

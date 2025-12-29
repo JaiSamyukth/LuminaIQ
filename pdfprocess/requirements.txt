@@ -31,4 +31,10 @@ lxml==6.0.2
 langchain-text-splitters==0.3.11
 
 # Async File Operations
+# Async File Operations
 aiofiles==23.2.1
+
+# RAG & LLM
+langchain-openai==0.1.23
+langchain-community==0.2.12
+
