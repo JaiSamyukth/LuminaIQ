@@ -132,11 +132,15 @@ async def upload_document(
             shutil.copyfileobj(file.file, buffer)
             
         # 2. Insert Initial Record into Supabase
+        file_stats = os.stat(temp_file_path)
+        file_size = file_stats.st_size
+        
         data = {
             "project_id": project_id,
             "filename": file.filename,
             "upload_status": "uploading",
-            # "content": "" # Content will be processed
+            "file_size": file_size,
+            "file_type": file.content_type or "application/pdf"
         }
         res = supabase_client.table("documents").insert(data).execute()
         

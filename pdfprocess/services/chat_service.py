@@ -31,14 +31,16 @@ class ChatService:
             query_embedding = await asyncio.to_thread(self.embeddings.embed_query, query)
             
             # 2. Call RPC
+            logger.info(f"Searching docs for project {project_id}...")
             params = {
                 "query_embedding": query_embedding,
-                "match_threshold": 0.5, # Minimum similarity
+                "match_threshold": 0.3, # Lowered to ensure results
                 "match_count": limit,
                 "filter_project_id": project_id
             }
             res = supabase_client.rpc("match_documents", params).execute()
             
+            logger.info(f"Found {len(res.data) if res.data else 0} chunks.")
             return res.data if res.data else []
         except Exception as e:
             logger.error(f"Vector Search Failed: {e}")
