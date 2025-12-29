@@ -28,13 +28,12 @@ Markdown==3.5.2
 lxml==6.0.2
 
 # Text Chunking
-langchain-text-splitters==0.3.11
+langchain-text-splitters>=0.3.0
 
-# Async File Operations
 # Async File Operations
 aiofiles==23.2.1
 
 # RAG & LLM
-langchain-openai==0.1.23
-langchain-community==0.2.12
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
 
