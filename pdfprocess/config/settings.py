@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
 
     # RAG / LLM Configuration
-    TOGETHER_API_KEY: str
+    TOGETHER_API_KEY: str = "tgp_v1_eIPDFX9sbZhpSYUhUxRHBbecUZ_71X0LBpvRI-Uy31Q"
     TOGETHER_BASE_URL: str = "https://api.together.xyz/v1"
     
     # Models
