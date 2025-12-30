@@ -22,9 +22,7 @@ export const AuthProvider = ({ children }) => {
             // Waiting for OAuth callback?
             if (window.location.hash && window.location.hash.includes('access_token')) {
                 console.log("OAuth Redirect detected, waiting for session...");
-                // Safety timeout
-                setTimeout(() => setLoading(false), 5000);
-                return;
+                return; // Do NOT turn off loading yet. Wait for onAuthStateChange
             }
 
             setLoading(false);
@@ -41,6 +39,7 @@ export const AuthProvider = ({ children }) => {
                 if (!currentToken) {
                     try {
                         // Exchange Supabase Access Token for App JWT
+                        console.log("Exchanging token with backend...");
                         const data = await apiLoginGoogle(session.access_token);
 
                         if (data.access_token) {
@@ -48,15 +47,21 @@ export const AuthProvider = ({ children }) => {
                             localStorage.setItem('user', JSON.stringify(data.user));
                             api.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
                             setUser(data.user);
+                            console.log("Backend Auth Successful!");
                         }
                     } catch (e) {
                         console.error("Google Token Exchange Failed:", e);
                         await supabase.auth.signOut(); // Clear invalid supabase session
+                        setUser(null);
                     }
                 }
+                // Auth flow complete (success or fail) -> Stop loading
+                setLoading(false);
             }
+
             if (event === 'SIGNED_OUT') {
-                // handled by logout function usually
+                setUser(null);
+                setLoading(false);
             }
         });
 
