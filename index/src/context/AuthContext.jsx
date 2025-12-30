@@ -9,6 +9,8 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let isExchangingToken = false;
+        
         // init check
         const initAuth = async () => {
             const token = localStorage.getItem('token');
@@ -31,12 +33,15 @@ export const AuthProvider = ({ children }) => {
 
         // Listen for Supabase OAuth Redirects
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log(`Auth state changed: ${event}`, session ? 'with session' : 'no session');
+            
             if (event === 'SIGNED_IN' && session) {
                 console.log("Supabase Signed In via OAuth");
                 const currentToken = localStorage.getItem('token');
 
-                // If we don't have our app token yet, exchange the Supabase one
-                if (!currentToken) {
+                // If we don't have our app token yet and not already exchanging, exchange the Supabase one
+                if (!currentToken && !isExchangingToken) {
+                    isExchangingToken = true;
                     try {
                         // Exchange Supabase Access Token for App JWT
                         console.log("Exchanging token with backend...");
@@ -48,11 +53,18 @@ export const AuthProvider = ({ children }) => {
                             api.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
                             setUser(data.user);
                             console.log("Backend Auth Successful!");
+                        } else {
+                            throw new Error("No access token received from backend");
                         }
                     } catch (e) {
                         console.error("Google Token Exchange Failed:", e);
+                        console.error("Error details:", e.response?.data);
                         await supabase.auth.signOut(); // Clear invalid supabase session
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
                         setUser(null);
+                    } finally {
+                        isExchangingToken = false;
                     }
                 }
                 // Auth flow complete (success or fail) -> Stop loading
@@ -60,6 +72,10 @@ export const AuthProvider = ({ children }) => {
             }
 
             if (event === 'SIGNED_OUT') {
+                console.log("User signed out");
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                delete api.defaults.headers.common['Authorization'];
                 setUser(null);
                 setLoading(false);
             }
