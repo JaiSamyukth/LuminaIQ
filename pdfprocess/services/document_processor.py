@@ -10,7 +10,6 @@ from utils.logger import logger
 from langchain_openai import OpenAIEmbeddings
 
 class DocumentProcessor:
-    def __init__(self):
         self.client = supabase_client
         self.file_parser = FileParser()
         self.text_chunker = TextChunker(
@@ -18,6 +17,7 @@ class DocumentProcessor:
             overlap=settings.CHUNK_OVERLAP
         )
         # Initialize Embeddings (Together AI)
+        print(f"Initializing Embeddings with Model: {settings.EMBEDDING_MODEL}")
         self.embeddings = OpenAIEmbeddings(
             model=settings.EMBEDDING_MODEL,
             openai_api_key=settings.TOGETHER_API_KEY,
