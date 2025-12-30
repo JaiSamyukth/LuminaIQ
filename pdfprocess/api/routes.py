@@ -10,6 +10,8 @@ from fastapi.responses import StreamingResponse
 import uuid
 import fitz # PyMuPDF
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 # Define Router
 router = APIRouter()
@@ -112,7 +114,7 @@ async def delete_project(project_id: str):
 
 @router.post("/documents/upload")
 async def upload_document(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     project_id: str = Form(...)
 ):
     """
@@ -121,20 +123,20 @@ async def upload_document(
     import os
     import shutil
     from services.document_processor import document_processor
-    
+
     # Create temp directory if not exists
     os.makedirs("temp", exist_ok=True)
     temp_file_path = f"temp/{file.filename}"
-    
+
     try:
         # 1. Save UploadFile to disk
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+
         # 2. Insert Initial Record into Supabase
         file_stats = os.stat(temp_file_path)
         file_size = file_stats.st_size
-        
+
         data = {
             "project_id": project_id,
             "filename": file.filename,
@@ -143,28 +145,32 @@ async def upload_document(
             "file_type": file.content_type or "application/pdf"
         }
         res = supabase_client.table("documents").insert(data).execute()
-        
+
         if not res.data:
              raise HTTPException(status_code=500, detail="Failed to create document record")
-             
+
         doc_id = res.data[0]['id']
-        
+
         # 3. Process Document
+        print(f"DEBUG: Starting document processing for {file.filename}")
         await document_processor.process_document(
             document_id=str(doc_id),
             project_id=project_id,
             file_path=temp_file_path,
             filename=file.filename
         )
-        
+        print(f"DEBUG: Document processing completed for {file.filename}")
+
         # 4. Cleanup
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-            
+
         return {"message": "File processed successfully", "id": doc_id}
 
     except Exception as e:
         print(f"Upload Error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents/{project_id}")
@@ -306,6 +312,69 @@ async def get_chat_history(project_id: str):
 
 
 # --- GENERATION ENDPOINTS (Simplified Stub) ---
+
+# --- SUMMARY ENDPOINT ---
+
+class SummaryRequest(BaseModel):
+    project_id: str
+    selected_documents: List[str] = []
+
+@router.post("/chat/summary")
+async def generate_summary(request: SummaryRequest):
+    """
+    Generate a summary of documents in a project.
+    1. Retrieve all chunks from Supabase (or filtered by selected_documents)
+    2. Construct a summary prompt
+    3. Return LLM-generated summary
+    """
+    try:
+        project_id = request.project_id
+        selected_docs = request.selected_documents
+        
+        # Get all chunks for the project (or filtered)
+        if selected_docs:
+            # Filter by selected documents
+            res = supabase_client.table("document_chunks").select("*").in_("document_id", selected_docs).order("chunk_index").execute()
+        else:
+            # Get all chunks for project
+            res = supabase_client.table("document_chunks").select("*").eq("project_id", project_id).order("chunk_index").execute()
+        
+        chunks = res.data if res.data else []
+        
+        if not chunks:
+            return {"answer": "No document content available to generate summary. Please upload and process documents first."}
+        
+        # Limit chunks to avoid excessive token usage (take first 20 chunks or ~20KB of text)
+        max_chunks = 20
+        text_content = ""
+        for chunk in chunks[:max_chunks]:
+            text_content += chunk.get("chunk_text", "") + "\n\n"
+        
+        # Generate summary using LLM
+        llm = ChatOpenAI(
+            model=settings.CHAT_MODEL,
+            openai_api_key=settings.TOGETHER_API_KEY,
+            openai_api_base=settings.TOGETHER_BASE_URL,
+            temperature=0.5
+        )
+        
+        summary_prompt = f"""Generate a comprehensive summary of the following document content. 
+Focus on the main ideas, key themes, and important information.
+
+Document Content:
+{text_content[:15000]}  # Limit to ~15K chars
+
+Please provide a well-structured summary:"""
+        
+        response = await llm.ainvoke([HumanMessage(content=summary_prompt)])
+        
+        return {"answer": response.content}
+        
+    except Exception as e:
+        print(f"Summary Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/mcq/generate")
 async def generate_mcq(request: MCQRequest):

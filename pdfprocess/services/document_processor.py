@@ -41,8 +41,11 @@ class DocumentProcessor:
 
             # 1. Extract text (Run in thread pool to avoid blocking)
             logger.info(f"Extracting text from {filename}")
+            print(f"DEBUG: Starting text extraction for {filename}")
             await self._update_document_status(document_id, "processing", "Extracting text...")
             text = await loop.run_in_executor(None, self.file_parser.extract_text, file_path)
+            
+            print(f"DEBUG: Extracted text length: {len(text) if text else 0}")
             
             if not text:
                 await self._update_document_status(document_id, "failed", "Failed to extract text")
@@ -50,11 +53,14 @@ class DocumentProcessor:
             
             # 2. Chunk text (Run in thread pool to avoid blocking)
             logger.info(f"Chunking text from {filename}")
+            print(f"DEBUG: Starting text chunking")
             await self._update_document_status(document_id, "processing", "Chunking text...")
             chunks = await loop.run_in_executor(
                 None, 
                 lambda: self.text_chunker.chunk_text(text)
             )
+            
+            print(f"DEBUG: Generated {len(chunks)} chunks")
             
             if not chunks:
                 await self._update_document_status(document_id, "failed", "No chunks generated")
@@ -86,12 +92,15 @@ class DocumentProcessor:
         try:
             # Generate Embeddings for the whole batch
             logger.info(f"Generating embeddings for {len(chunks)} chunks...")
+            print(f"DEBUG: Generating embeddings for {len(chunks)} chunks...")
             # Run in thread pool to avoid blocking async loop since it's a sync call or IO heavy
             loop = asyncio.get_running_loop()
             embeddings_list = await loop.run_in_executor(
                 None, 
                 lambda: self.embeddings.embed_documents(chunks)
             )
+            
+            print(f"DEBUG: Generated {len(embeddings_list)} embeddings, first dim: {len(embeddings_list[0]) if embeddings_list else 'N/A'}")
             
             # Prepare chunk records
             chunk_records = [
@@ -109,11 +118,15 @@ class DocumentProcessor:
             batch_size = 100
             for i in range(0, len(chunk_records), batch_size):
                 batch = chunk_records[i:i + batch_size]
+                print(f"DEBUG: Inserting batch {i // batch_size + 1}, {len(batch)} chunks")
                 self.client.table("document_chunks").insert(batch).execute()
                 logger.info(f"Inserted chunk batch {i // batch_size + 1}")
                 
         except Exception as e:
             logger.error(f"Error storing chunks: {str(e)}")
+            print(f"DEBUG: Error storing chunks: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise
     
     async def _update_document_status(
