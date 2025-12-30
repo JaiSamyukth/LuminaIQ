@@ -26,6 +26,8 @@ class TextChunker:
             current_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=chunk_size or self.splitter._chunk_size,
                 chunk_overlap=overlap or self.splitter._chunk_overlap,
+                length_function=len,
+                is_separator_regex=False,
                 separators=["\n\n", "\n", " ", ""]
             )
             

@@ -201,22 +201,29 @@ async def google_auth(request: TokenExchangeRequest):
         # Verify the token with Supabase by getting the user
         user_response = supabase_client.auth.get_user(request.access_token)
         
-        if not user_response.user:
-            raise HTTPException(status_code=401, detail="Invalid Supabase Token")
+        if not user_response or not user_response.user:
+            print(f"Google Auth Error: Invalid user response")
+            raise HTTPException(status_code=401, detail="Invalid or expired access token")
 
         # Return the same token (or mint a new one if we had custom auth)
-        # We also return the user object matchin Frontend expectation
+        # We also return the user object matching Frontend expectation
+        user_data = {
+            "id": user_response.user.id,
+            "email": user_response.user.email or "",
+            "user_metadata": user_response.user.user_metadata or {}
+        }
+        
         return {
             "access_token": request.access_token,
-            "user": {
-                "id": user_response.user.id,
-                "email": user_response.user.email,
-                "user_metadata": user_response.user.user_metadata
-            }
+            "user": user_data
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Auth Error: {e}")
-        raise HTTPException(status_code=401, detail="Authentication Failed")
+        print(f"Google Auth Error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 @router.post("/auth/login", response_model=AuthResponse)
 async def login(request: LoginRequest):
