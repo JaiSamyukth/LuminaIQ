@@ -2,7 +2,7 @@ import json
 import asyncio
 from typing import List, AsyncGenerator
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from db.client import supabase_client
 from config.settings import settings
 from utils.logger import logger
