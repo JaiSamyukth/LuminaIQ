@@ -29,9 +29,9 @@ class Settings(BaseSettings):
     TOGETHER_BASE_URL: str = "https://api.together.xyz/v1"
     
     # Models
-    # Using small/efficient models for speed and cost
-    EMBEDDING_MODEL: str = "togethercomputer/m2-bert-80M-8k-retrieval" # 768 dims
-    CHAT_MODEL: str = "meta-llama/Llama-3-8b-chat-hf" # Fast, good chat model
+    # Using specific Serverless Endpoints for Together AI
+    EMBEDDING_MODEL: str = "BAAI/bge-base-en-v1.5" # 768 dims, reliable
+    CHAT_MODEL: str = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo" # Serverless & Fast
     
     class Config:
         env_file = ".env"
