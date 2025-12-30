@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { api, login as apiLogin, signup as apiSignup, loginWithGoogle as apiLoginGoogle } from '../api';
 import { supabase } from '../supabaseClient';
 
@@ -7,24 +7,23 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const isExchangingToken = useRef(false);
 
     useEffect(() => {
-        let isExchangingToken = false;
-        
         // init check
         const initAuth = async () => {
             const token = localStorage.getItem('token');
             const storedUser = localStorage.getItem('user');
 
             if (token && storedUser) {
-                setUser(JSON.parse(storedUser));
-                api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            }
-
-            // Waiting for OAuth callback?
-            if (window.location.hash && window.location.hash.includes('access_token')) {
-                console.log("OAuth Redirect detected, waiting for session...");
-                return; // Do NOT turn off loading yet. Wait for onAuthStateChange
+                try {
+                    setUser(JSON.parse(storedUser));
+                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                } catch (e) {
+                    console.error("Failed to parse stored user:", e);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                }
             }
 
             setLoading(false);
@@ -35,13 +34,13 @@ export const AuthProvider = ({ children }) => {
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log(`Auth state changed: ${event}`, session ? 'with session' : 'no session');
             
+            // Handle OAuth redirect callback
             if (event === 'SIGNED_IN' && session) {
                 console.log("Supabase Signed In via OAuth");
-                const currentToken = localStorage.getItem('token');
-
-                // If we don't have our app token yet and not already exchanging, exchange the Supabase one
-                if (!currentToken && !isExchangingToken) {
-                    isExchangingToken = true;
+                
+                // If we're not already exchanging a token and don't have a local session
+                if (!localStorage.getItem('token') && !isExchangingToken.current) {
+                    isExchangingToken.current = true;
                     try {
                         // Exchange Supabase Access Token for App JWT
                         console.log("Exchanging token with backend...");
@@ -53,6 +52,11 @@ export const AuthProvider = ({ children }) => {
                             api.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
                             setUser(data.user);
                             console.log("Backend Auth Successful!");
+                            
+                            // Clear the OAuth state from URL
+                            if (window.history.replaceState) {
+                                window.history.replaceState(null, '', window.location.pathname);
+                            }
                         } else {
                             throw new Error("No access token received from backend");
                         }
@@ -64,11 +68,9 @@ export const AuthProvider = ({ children }) => {
                         localStorage.removeItem('user');
                         setUser(null);
                     } finally {
-                        isExchangingToken = false;
+                        isExchangingToken.current = false;
                     }
                 }
-                // Auth flow complete (success or fail) -> Stop loading
-                setLoading(false);
             }
 
             if (event === 'SIGNED_OUT') {
@@ -77,12 +79,16 @@ export const AuthProvider = ({ children }) => {
                 localStorage.removeItem('user');
                 delete api.defaults.headers.common['Authorization'];
                 setUser(null);
-                setLoading(false);
             }
+            
+            // Always stop loading after auth state settles
+            setLoading(false);
         });
 
         return () => {
-            authListener.subscription.unsubscribe();
+            if (authListener?.subscription) {
+                authListener.subscription.unsubscribe();
+            }
         };
     }, []);
 
@@ -115,10 +121,15 @@ export const AuthProvider = ({ children }) => {
 
     const loginWithGoogle = async () => {
         try {
+            // Use the current origin for redirect, or a configured production URL
+            const redirectTo = window.location.origin;
+            console.log("Initiating Google OAuth with redirect to:", redirectTo);
+            
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin
+                    redirectTo: redirectTo,
+                    skipBrowserRedirect: false
                 }
             });
             if (error) throw error;

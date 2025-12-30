@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { BookOpen, Loader2, ArrowRight, Mail, Lock, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { login, signup, loginWithGoogle } = useAuth();
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -12,6 +13,9 @@ const Login = () => {
     const [fullName, setFullName] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null); // { type: 'success' | 'error', text: '' }
+
+    // Get the intended destination from location state, or default to dashboard
+    const from = location.state?.from || '/dashboard';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -21,7 +25,10 @@ const Login = () => {
         try {
             if (isLogin) {
                 const success = await login(email, password);
-                if (success) navigate('/dashboard');
+                if (success) {
+                    // Redirect to where user came from, or dashboard
+                    navigate(from, { replace: true });
+                }
             } else {
                 // Password Validation
                 const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;

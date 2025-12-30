@@ -1,7 +1,8 @@
 import os
 import tempfile
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form, status
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from config.settings import settings
 from services.document_processor import document_processor
@@ -57,6 +58,19 @@ async def root():
 async def health_check():
     """Health check for Render"""
     return {"status": "healthy", "service": "pdf-processing"}
+
+
+# SPA Fallback: Serve index.html for all non-API routes (supports frontend routing)
+SPA_INDEX_PATH = "static/index.html"
+
+@app.exception_handler(404)
+async def spa_fallback_handler(request: Request, exc):
+    """Serve React app for client-side routes"""
+    # Only serve SPA for paths that don't look like API calls or static files
+    path = request.url.path
+    if not path.startswith("/api/") and not path.startswith("/static/") and not path.endswith((".js", ".css", ".ico", ".png", ".jpg", ".svg", ".woff", ".woff2")):
+        return FileResponse("static/index.html")
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
 @app.post("/upload", response_model=DocumentUploadResponse)
